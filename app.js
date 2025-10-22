@@ -21,10 +21,6 @@ app.use(cors());
 app.use(express.json()); 
 app.use(express.urlencoded({ extended: true }));
 
-// =================================================================
-// 1. Inicialização Assíncrona do Banco de Dados
-// =================================================================
-
 async function initializeDatabase() {
     try {
         db = await sqlite.open({ filename: './rifas.db', driver: sqlite3.Database });
@@ -370,31 +366,10 @@ async function limparReservasExpiradas() {
 }
 
 
-// =================================================================
-// 7. Função Principal para Iniciar a Aplicação
-// =================================================================
-async function main() {
-    const dbInitialized = await initializeDatabase();
-    if (!dbInitialized) return; 
+await initializeDatabase();
+initializeMercadoPago();
+setInterval(limparReservasExpiradas, 5 * 60 * 1000);
 
-    initializeMercadoPago();
-
-    // INICIA O "JANITOR" (LIMPADOR)
-    // Define o intervalo (a cada 5 minutos)
-    const CINCO_MINUTOS = 5 * 60 * 1000;
-    // const DEZ_SEGUNDOS = 10 * 1000; // (Para TESTAR)
-
-    // Executa o limpador em intervalos regulares
-    setInterval(limparReservasExpiradas, CINCO_MINUTOS); 
-    
-    // Executa uma vez na inicialização (para limpar reservas antigas se o server caiu)
-    console.log('[JANITOR] Executando verificação inicial de reservas expiradas...');
-    limparReservasExpiradas(); 
-
-    app.listen(port, () => {
-        console.log(`Servidor rodando em http://localhost:${port}`);
-    });
-}
-
-// Inicia a função principal
-main();
+app.listen(port, () => {
+  console.log(`🚀 Servidor rodando na porta ${port}`);
+});
