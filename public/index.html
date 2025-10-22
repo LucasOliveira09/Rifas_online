@@ -67,8 +67,8 @@
 <script>
     const API_URL = 'https://rifas-online.onrender.com'; 
     const VALOR_UNITARIO = 3.00;
-    const LS_KEY = 'rifa_pagamento_pendente_ref'; // Renomeado para clareza
-    const DADOS_KEY = 'rifa_pagamento_dados_qr'; // Nova chave 
+    const LS_KEY = 'rifa_pagamento_pendente_ref'; 
+    const DADOS_KEY = 'rifa_pagamento_dados_qr';  
     const LS_COMPRADOR_TEL = 'rifa_comprador_telefone';
     let selectedRifas = []; 
     // pollingInterval e externalReference removidos, não são mais usados aqui
@@ -197,8 +197,8 @@
                 localStorage.setItem(LS_KEY, data.external_reference);
 
                 const dadosParaPagamento = {
-                ...data, // qr_code_base64, qr_code, etc.
-                comprador: formData // nome, telefone, email, cpf
+                ...data, 
+                comprador: formData 
             };
 
                 localStorage.setItem(DADOS_KEY, JSON.stringify(data));
