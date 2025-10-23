@@ -1,0 +1,187 @@
+body { 
+            font-family: Arial, sans-serif; 
+            margin: 0;
+            padding: 10px; /* Melhor para mobile */
+            background-color: #f4f4f9; 
+            box-sizing: border-box;
+        }
+        .container { 
+            width: 100%; /* Ocupa 100% da tela */
+            max-width: 1000px; /* Limite em desktops */
+            margin: 10px auto; 
+            background: white; 
+            padding: 15px; /* Padding reduzido */
+            border-radius: 8px; 
+            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+            box-sizing: border-box;
+        }
+        
+        h1 { 
+            color: #333; 
+            font-size: 1.8rem; 
+            text-align: center;
+        }
+        h2 {
+            color: #333;
+            text-align: center;
+        }
+
+        .titulo-rifa > p {
+
+            text-align: center;
+            color: #555;
+            font-size: 1.1rem;
+            margin-top: -8px;
+        }
+
+        .container > p {
+            text-align: center;
+            font-size: 1.1rem;
+            color: #555;
+        }
+
+        .rifa-grid { 
+            display: grid; 
+            grid-template-columns: repeat(auto-fit, minmax(50px, 1fr)); 
+            gap: 8px; 
+            margin-bottom: 20px; 
+        }
+        
+        .numero { 
+            padding: 0; 
+            aspect-ratio: 1 / 1; 
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            text-align: center; 
+            border-radius: 5px; 
+            font-weight: bold; 
+            cursor: pointer; 
+            transition: background-color 0.2s;
+            border: 1px solid #ddd;
+            font-size: 1rem;
+        }
+
+        .DISPONIVEL { background-color: #7aff7a; color: #004d00; }
+        .RESERVADO { background-color: #ffd24c; color: #8f5c00; cursor: pointer; }
+        .PAGO { background-color: #ff4d4d; color: white; cursor: not-allowed; }
+        .numero.selected { 
+            border: 3px solid #007bff; 
+            background-color: #c0dfff; 
+            box-shadow: 0 0 10px rgba(0,123,255,0.5);
+        }
+        
+        .form-area { 
+            margin-top: 20px; 
+            padding: 15px; 
+            border: 1px dashed #ccc; 
+            border-radius: 5px; 
+        }
+        label { 
+            display: block; 
+            margin-top: 15px; 
+            font-weight: bold; 
+        }
+        
+        input[type="text"], 
+        input[type="email"], 
+        input[type="number"], 
+        textarea { 
+            width: 100%; /* Ocupa 100% do container */
+            padding: 12px; /* Mais fácil de tocar */
+            margin-top: 5px; 
+            border: 1px solid #ddd; 
+            border-radius: 4px; 
+            box-sizing: border-box; /* Essencial para width 100% */
+        }
+        
+        /* 🚨 MUDANÇA: Botão 100% responsivo */
+        button { 
+            width: 100%; /* Ocupa 100% */
+            padding: 15px 15px; /* Botão maior e mais fácil de tocar */
+            background-color: #007bff; 
+            color: white; 
+            border: none; 
+            border-radius: 4px; 
+            cursor: pointer; 
+            margin-top: 20px; /* Mais espaço */
+            font-size: 1.1rem;
+            font-weight: bold;
+            box-sizing: border-box; /* Essencial para width 100% */
+        }
+        button:hover { background-color: #0056b3; }
+        .loading { text-align: center; font-size: 1.2em; color: #666; }
+
+        /* Estilo do Carrinho */
+        .carrinho { 
+            margin-top: 15px; 
+            padding: 10px; 
+            border: 1px dashed #007bff; 
+            background-color: #e6f3ff; 
+        }
+        .carrinho p { margin: 5px 0; font-weight: bold; }
+
+        /* Banner de pagamento pendente */
+        #pending-banner {
+            max-width: 1000px;
+            margin: 0 auto 15px auto;
+            background-color: #ffd24c; 
+            padding: 15px; 
+            border-radius: 5px; 
+            text-align: center; 
+            font-weight: bold;
+            box-sizing: border-box;
+        }
+        #pending-banner a {
+            color: #0056b3; 
+            text-decoration: underline;
+        }
+
+        .pesquisa-area {
+            margin-top: 20px;
+            padding: 15px;
+            border: 1px dashed #6c757d;
+            background-color: #f8f9fa;
+            border-radius: 5px;
+        }
+        .pesquisa-area h2 {
+            margin-top: 0;
+            text-align: left;
+        }
+        .pesquisa-area form {
+            display: flex;
+            flex-wrap: wrap; /* Permite quebrar em telas pequenas */
+            gap: 10px;
+        }
+        .pesquisa-area input[type="text"] {
+            flex: 1; /* Ocupa o espaço disponível */
+            margin-top: 0;
+            min-width: 200px; /* Largura mínima */
+        }
+        .pesquisa-area button {
+            width: auto; /* Largura automática */
+            padding: 12px 20px;
+            margin-top: 0;
+            background-color: #28a745;
+        }
+        .pesquisa-area button:hover {
+            background-color: #218838;
+        }
+
+        /* Destaque para Meus Números */
+        #meus-numeros-display {
+            margin-top: 15px;
+            font-size: 1.1rem;
+        }
+        #meus-numeros-display .erro {
+            color: #dc3545;
+        }
+        
+        /* Classe de destaque na grade */
+        .numero.meu-numero {
+            background-color: #007bff;
+            color: white;
+            border: 3px solid #0056b3;
+            box-shadow: 0 0 15px rgba(0,123,255,0.7);
+            transform: scale(1.05);
+        }

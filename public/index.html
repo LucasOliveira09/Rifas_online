@@ -1,0 +1,301 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sistema de Venda de Rifas - PIX Mercado Pago</title>
+    <link rel="stylesheet" href="style.css">
+    <style>
+        /* =================================
+           ESTILOS RESPONSIVOS ATUALIZADOS
+           ================================= */
+        
+
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h1>RIFAS ESCOLA IRACEMA</h1>
+    <p>Valor por número: R$ 3,00 | Total de 100 números.</p>
+    
+    <div id="pending-banner" style="display:none;">
+        Você tem um pagamento pendente. <a href="pagamento.html">Clique aqui para ver o status</a>.
+    </div>
+
+    <div id="carrinho-resumo" class="carrinho" style="display:none;">
+        <p>Números Selecionados: <span id="numeros-selecionados-display"></span></p>
+        <p>Total a Pagar: R$ <span id="valor-total-display">0.00</span></p>
+    </div>
+
+    <div id="pesquisa-area" class="pesquisa-area">
+        <h2>Consultar Minhas Rifas</h2>
+        <form id="form-pesquisa">
+            <label for="search-telefone" class="sr-only">Seu Telefone:</label>
+            <input type="text" id="search-telefone" placeholder="Digite seu telefone (WhatsApp)">
+            <button type="submit">Buscar</button>
+        </form>
+        <div id="meus-numeros-display">
+            </div>
+    </div>
+
+    <br>
+
+    <div class="titulo-rifa">
+        <h1>Escolha os numeros desejados!</h1>
+        <p>Selecione os numeros e finalize a compra por pix logo abaixo dos numeros</p>
+    </div>
+    <div id="rifa-grid" class="rifa-grid">
+        <p class="loading">Carregando números da rifa...</p>
+    </div>
+
+    <div id="selecao-area" class="form-area" style="display: none;">
+        <h2>Dados do Comprador</h2>
+        <form id="form-comprador">
+            <label for="nome">Nome Completo:</label>
+            <input type="text" id="nome" required>
+            
+            <label for="telefone">Telefone (WhatsApp):</label>
+            <input type="text" id="telefone" required>
+            
+            <label for="email">E-mail:</label>
+            <input type="email" id="email" required>
+            
+            <label for="cpf">CPF (Obrigatório para PIX):</label>
+            <input type="text" id="cpf" required>
+
+            <button type="submit" id="submit-button">Ir para pagamento. Total: <span id="button-total">R$ 0.00</span></button>
+        </form>
+    </div>
+
+    </div>
+<script>
+    const API_URL = 'http://localhost:3000'; 
+    const VALOR_UNITARIO = 3.00;
+    const LS_KEY = 'rifa_pagamento_pendente_ref'; // Renomeado para clareza
+    const DADOS_KEY = 'rifa_pagamento_dados_qr'; // Nova chave 
+    const LS_COMPRADOR_TEL = 'rifa_comprador_telefone';
+    let selectedRifas = []; 
+    // pollingInterval e externalReference removidos, não são mais usados aqui
+
+    // =============================================================
+    // FUNÇÕES DE UTILIDADE E UI
+    // =============================================================
+    function updateCarrinho() {
+        const total = selectedRifas.length * VALOR_UNITARIO;
+        const numerosDisplay = selectedRifas.sort((a, b) => a - b).join(', ');
+        
+        document.getElementById('numeros-selecionados-display').textContent = numerosDisplay || 'Nenhum';
+        document.getElementById('valor-total-display').textContent = total.toFixed(2);
+        document.getElementById('button-total').textContent = `R$ ${total.toFixed(2)}`;
+
+        // A lógica de exibição do carrinho e formulário permanece a mesma
+        if (selectedRifas.length > 0) {
+            document.getElementById('carrinho-resumo').style.display = 'block';
+            document.getElementById('selecao-area').style.display = 'block';
+        } else {
+            document.getElementById('carrinho-resumo').style.display = 'none';
+            document.getElementById('selecao-area').style.display = 'none';
+        }
+    }
+
+    function toggleRifa(numero, element) {
+        const index = selectedRifas.indexOf(numero);
+        const num = parseInt(numero);
+
+        if (element.classList.contains('RESERVADO') || element.classList.contains('PAGO')) {
+            return; 
+        }
+
+        if (index > -1) {
+            selectedRifas.splice(index, 1);
+            element.classList.remove('selected');
+        } else {
+            selectedRifas.push(num);
+            element.classList.add('selected');
+        }
+        updateCarrinho();
+    }
+
+    // =============================================================
+    // 1. CARREGAR E EXIBIR OS NÚMEROS DA RIFA
+    // =============================================================
+    async function loadRifas() {
+        try {
+            const response = await fetch(`${API_URL}/rifas`);
+            const rifas = await response.json();
+            
+            const grid = document.getElementById('rifa-grid');
+            grid.innerHTML = ''; 
+            selectedRifas = []; 
+
+            rifas.forEach(rifa => {
+                const div = document.createElement('div');
+                div.className = `numero ${rifa.status}`;
+                div.textContent = rifa.numero;
+                div.dataset.numero = rifa.numero;
+
+                if (rifa.status === 'DISPONIVEL') {
+                    div.addEventListener('click', () => toggleRifa(rifa.numero, div));
+                } else {
+                    div.title = rifa.status === 'PAGO' ? `Vendido para ${rifa.comprador_nome || 'Cliente'}` : `Reservado por: ${rifa.comprador_nome || 'Cliente'}`;
+                }
+                grid.appendChild(div);
+            });
+            
+            checkPendingPayment(); 
+            checkMyCompletedRifas();
+
+
+        } catch (error) {
+            console.error('Erro ao carregar rifas:', error);
+            document.getElementById('rifa-grid').innerHTML = '<p style="color:red;">Erro ao conectar com o backend. Verifique se o servidor está ativo na porta 3000.</p>';
+        }
+    }
+
+    // =============================================================
+    // FUNÇÃO DE VERIFICAÇÃO DE SESSÃO
+    // =============================================================
+    function checkPendingPayment() {
+        const storedRef = localStorage.getItem(LS_KEY);
+        if (storedRef) {
+            document.getElementById('pending-banner').style.display = 'block';
+        }
+    }
+
+    // =============================================================
+    // 2. LÓGICA DE COMPRA E REDIRECIONAMENTO
+    // =============================================================
+    document.getElementById('form-comprador').addEventListener('submit', async function(e) {
+        e.preventDefault(); 
+
+        const button = document.getElementById('submit-button');
+
+        if (selectedRifas.length === 0 || !this.checkValidity()) {
+            alert("Por favor, selecione pelo menos um número e preencha todos os campos obrigatórios.");
+            this.reportValidity();
+            return;
+        }
+
+        const formData = {
+            numeros: selectedRifas, 
+            nome: document.getElementById('nome').value,
+            telefone: document.getElementById('telefone').value,
+            email: document.getElementById('email').value,
+            cpf: document.getElementById('cpf').value,
+        };
+
+        try {
+            button.disabled = true;
+            button.textContent = 'Gerando PIX...';
+
+            const response = await fetch(`${API_URL}/reservar`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(formData),
+            });
+
+            const data = await response.json();
+
+            if (response.ok && data.qr_code_base64) {
+                
+                localStorage.setItem(LS_KEY, data.external_reference);
+
+                const dadosParaPagamento = {
+                ...data, // qr_code_base64, qr_code, etc.
+                comprador: formData // nome, telefone, email, cpf
+            };
+
+                localStorage.setItem(DADOS_KEY, JSON.stringify(data));
+
+                window.location.href = 'pagamento.html';
+
+            } else if (response.status === 409) {
+                alert(`Falha ao reservar: ${data.error || 'Alguns números já foram reservados.'} (${data.numeros.join(', ')})`);
+                loadRifas(); 
+            
+            } else {
+                alert(`Falha ao reservar: ${data.error || 'Verifique o console do servidor.'}`);
+                loadRifas(); 
+            }
+
+        } catch (error) {
+            console.error('Erro de rede na requisição:', error);
+            alert('Erro de comunicação com o servidor. Tente novamente.');
+        } finally {
+            button.disabled = false; 
+            updateCarrinho();
+        }
+    });
+
+    document.getElementById('form-pesquisa').addEventListener('submit', (e) => {
+        e.preventDefault();
+        const telefone = document.getElementById('search-telefone').value;
+        fetchAndHighlightRifas(telefone);
+    });
+
+    // A função startPaymentPolling() foi removida desta página.
+
+    async function fetchAndHighlightRifas(telefone) {
+        if (!telefone) return;
+        
+        const displayArea = document.getElementById('meus-numeros-display');
+        const grid = document.getElementById('rifa-grid');
+        displayArea.innerHTML = 'Buscando...';
+
+        try {
+            const response = await fetch(`${API_URL}/minhas-rifas/${telefone}`);
+            const rifas = await response.json();
+
+            if (!response.ok) {
+                displayArea.innerHTML = `<span class="erro">${rifas.error || 'Telefone não encontrado.'}</span>`;
+                return;
+            }
+            
+            if (rifas.length === 0) {
+                displayArea.innerHTML = 'Nenhum número (pago ou pendente) encontrado para este telefone.';
+                return;
+            }
+
+            // Limpa destaques antigos
+            grid.querySelectorAll('.meu-numero').forEach(el => el.classList.remove('meu-numero'));
+
+            const numeros = [];
+            rifas.forEach(rifa => {
+                numeros.push(rifa.numero);
+                // Encontra o div na grade e aplica a classe
+                const el = grid.querySelector(`.numero[data-numero="${rifa.numero}"]`);
+                if (el) {
+                    el.classList.add('meu-numero');
+                }
+            });
+
+            // Exibe os números encontrados
+            displayArea.innerHTML = `Seus números: <strong>${numeros.join(', ')}</strong>`;
+            // Salva o telefone pesquisado para futuras visitas
+            localStorage.setItem(LS_COMPRADOR_TEL, telefone);
+
+        } catch (error) {
+            console.error('Erro ao buscar rifas:', error);
+            displayArea.innerHTML = '<span class="erro">Erro ao conectar com o servidor.</span>';
+        }
+    }
+
+    /**
+     * Verifica se há um telefone salvo no localStorage e roda a busca
+     */
+    function checkMyCompletedRifas() {
+        const meuTelefone = localStorage.getItem(LS_COMPRADOR_TEL);
+        if (meuTelefone) {
+            // Preenche o campo de busca
+            document.getElementById('search-telefone').value = meuTelefone;
+            // Roda a busca automaticamente
+            fetchAndHighlightRifas(meuTelefone);
+        }
+    }
+
+    loadRifas();
+</script>
+
+</body>
+</html>

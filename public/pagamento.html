@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pagamento da Rifa</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; background-color: #f4f4f9; display: flex; justify-content: center; align-items: center; min-height: 90vh; }
+        .container { max-width: 600px; margin: auto; background: white; padding: 20px; border-radius: 8px; box-shadow: 0 4px 8px rgba(0,0,0,0.1); text-align: center; }
+        h1, h2 { color: #333; }
+        label { display: block; margin-top: 10px; font-weight: bold; }
+        textarea { width: 95%; padding: 10px; margin-top: 5px; border: 1px solid #ddd; border-radius: 4px; }
+        button { padding: 10px 15px; background-color: #007bff; color: white; border: none; border-radius: 4px; cursor: pointer; margin-top: 10px; }
+        button:hover { background-color: #0056b3; }
+        #qr-code-img { width: 250px; height: 250px; margin: 20px 0; border: 1px solid #ccc; }
+        #status-pendente { color: orange; font-weight: bold; }
+        #status-aprovado { color: green; font-weight: bold; display: none; }
+        #status-falha { color: red; font-weight: bold; display: none; }
+    </style>
+</head>
+<body>
+
+<div id="container" class="container">
+    <h2>Pagamento PIX (Ordem <span id="pix-ref-display">...</span>)</h2>
+    
+    <div id="status-pendente">
+        <p>Status: <span id="payment-status-display" style="font-weight: bold;">PENDENTE</span></p>
+        <p>Aguardando a confirmação do pagamento. Não saia desta tela.</p>
+        <p>O pagamento deve ser feito em até 10 minutos.</p>
+    </div>
+
+    <div id="status-aprovado">
+        <h2>PAGAMENTO APROVADO!</h2>
+        <p>Seus números foram confirmados com sucesso. Obrigado!</p>
+    </div>
+    
+    <div id="status-falha">
+        <h2>PAGAMENTO FALHOU!</h2>
+        <p>O pagamento falhou ou expirou. Os números foram liberados.</p>
+    </div>
+
+    <div id="qr-code-area">
+        <img id="qr-code-img" src="" alt="QR Code PIX">
+        <br>
+        <label for="pix-copy-paste">PIX Copia e Cola:</label>
+        <textarea id="pix-copy-paste" rows="3" readonly></textarea>
+        <button onclick="copyPixCode()">Copiar Código</button>
+    </div>
+
+    <br>
+    <a href="index.html">
+        <button id="voltar-btn" style="background-color: #6c757d;">Voltar para o Início</button>
+    </a>
+</div>
+
+<script>
+    const API_URL = 'http://localhost:3000'; 
+    const LS_KEY = 'rifa_pagamento_pendente_ref';
+    const DADOS_KEY = 'rifa_pagamento_dados_qr';
+    let pollingInterval;
+
+    function copyPixCode() {
+        const pixCode = document.getElementById('pix-copy-paste');
+        pixCode.select();
+        document.execCommand('copy');
+        alert('Código PIX Copia e Cola copiado!');
+    }
+
+    // =============================================================
+    // 3. LÓGICA DE MONITORAMENTO DO PAGAMENTO (Polling)
+    // =============================================================
+    function startPaymentPolling(externalRef) {
+        if (pollingInterval) {
+            clearInterval(pollingInterval);
+        }
+
+        pollingInterval = setInterval(async () => {
+            try {
+                const response = await fetch(`${API_URL}/status/${externalRef}`);
+                const data = await response.json();
+
+                const currentStatus = data.status;
+                const statusDisplay = document.getElementById('payment-status-display');
+                
+                if (currentStatus === 'approved' || currentStatus === 'PAGO') {
+                    // SUCCESSO
+                    clearInterval(pollingInterval);
+
+                    try {
+                        // Pega os dados da compra (que salvamos no index.html)
+                        const dadosCompra = JSON.parse(localStorage.getItem(DADOS_KEY));
+                        if (dadosCompra && dadosCompra.comprador && dadosCompra.comprador.telefone) {
+                            // Salva permanentemente o telefone do comprador
+                            localStorage.setItem('rifa_comprador_telefone', dadosCompra.comprador.telefone);
+                        }
+                    } catch (e) {
+                        console.error('Falha ao salvar telefone do comprador', e);
+                    }
+
+                    localStorage.removeItem(LS_KEY); 
+                    localStorage.removeItem(DADOS_KEY);
+                    
+                    document.getElementById('status-pendente').style.display = 'none';
+                    document.getElementById('qr-code-area').style.display = 'none';
+                    document.getElementById('status-aprovado').style.display = 'block';
+                
+                } else if (currentStatus === 'rejected' || currentStatus === 'cancelled' || currentStatus === 'DISPONIVEL' || currentStatus === 'error' || currentStatus === 'not_found') {
+                    // FALHA
+                    clearInterval(pollingInterval);
+                    localStorage.removeItem(LS_KEY); 
+                    localStorage.removeItem(DADOS_KEY); 
+
+                    document.getElementById('status-pendente').style.display = 'none';
+                    document.getElementById('qr-code-area').style.display = 'none';
+                    document.getElementById('status-falha').style.display = 'block';
+                
+                } else {
+                    // AGUARDANDO
+                    statusDisplay.textContent = 'PENDENTE (Verificando...)';
+                }
+
+            } catch (error) {
+                console.error('Erro no Polling:', error);
+            }
+        }, 5000); 
+    }
+
+    // =============================================================
+    // FUNÇÃO DE INICIALIZAÇÃO DA PÁGINA
+    // =============================================================
+    document.addEventListener('DOMContentLoaded', () => {
+        const dadosQR = JSON.parse(localStorage.getItem(DADOS_KEY));
+        const externalRef = localStorage.getItem(LS_KEY);
+
+        if (dadosQR && dadosQR.external_reference === externalRef) {
+            // Fluxo 1: Usuário acabou de chegar
+            document.getElementById('qr-code-img').src = `data:image/png;base64,${dadosQR.qr_code_base64}`;
+            document.getElementById('pix-copy-paste').value = dadosQR.qr_code;
+            document.getElementById('pix-ref-display').textContent = dadosQR.external_reference;
+            startPaymentPolling(dadosQR.external_reference);
+
+        } else if (externalRef) {
+            // Fluxo 2: Usuário deu refresh (perdeu o QR Code, mas ainda monitora)
+            document.getElementById('pix-ref-display').textContent = externalRef;
+            document.getElementById('qr-code-area').innerHTML = '<p style="color: red; font-weight: bold;">Sessão recuperada. O QR Code não pôde ser recarregado. Estamos apenas verificando o status do pagamento que você iniciou.</p>';
+            startPaymentPolling(externalRef);
+        
+        } else {
+            // Fluxo 3: Nenhuma pagamento
+            document.getElementById('container').innerHTML = '<h1>Nenhum pagamento pendente encontrado.</h1><a href="index.html"><button>Voltar</button></a>';
+        }
+    });
+
+</script>
+
+</body>
+</html>
