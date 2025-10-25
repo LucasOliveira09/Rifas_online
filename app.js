@@ -24,8 +24,8 @@ app.use(cors());
 app.use(express.json()); 
 app.use(express.urlencoded({ extended: true }));
 
-// Função de inicialização "limpa" (sem erros de espaço)
 async function initializeDatabase() {
+    // ... (esta função não muda, já está "limpa") ...
     try {
         await pool.query(`CREATE TABLE IF NOT EXISTS rifas (
             numero INTEGER PRIMARY KEY,
@@ -38,12 +38,10 @@ async function initializeDatabase() {
             payment_id BIGINT,
             reservado_em TIMESTAMPTZ
         )`);
-
         console.log('Tabela "rifas" verificada/criada.');
         await pool.query('ALTER TABLE rifas ADD COLUMN IF NOT EXISTS reservado_em TIMESTAMPTZ');
         const res = await pool.query("SELECT COUNT(*) as count FROM rifas");
         const row = res.rows[0];
-        
         if (row && row.count == 0) { 
             console.log("Inicializando 100 números da rifa...");
             await pool.query('BEGIN');
@@ -61,6 +59,7 @@ async function initializeDatabase() {
 }
 
 function initializeMercadoPago() {
+    // ... (esta função não muda) ...
     if (!ACCESS_TOKEN || ACCESS_TOKEN === "SEU_ACCESS_TOKEN_REAL_DE_TESTE_AQUI") {
         console.error("ERRO CRÍTICO: Configure o ACCESS_TOKEN nas variáveis de ambiente");
         process.exit(1);
@@ -78,6 +77,7 @@ function initializeMercadoPago() {
 // =================================================================
 
 app.get('/rifas', async (req, res) => {
+    // ... (esta rota não muda) ...
     try {
         const { rows } = await pool.query("SELECT numero, status, comprador_nome, comprador_telefone, comprador_email FROM rifas ORDER BY numero");
         res.json(rows); 
@@ -88,18 +88,21 @@ app.get('/rifas', async (req, res) => {
 });
 
 // ******** ESTA É A ROTA CORRIGIDA ********
-// Ela agora usa os dados reais (email, cpf) enviados pelo frontend
+// Ela usa um E-MAIL FIXO e espera o CPF REAL do cliente
 app.post('/reservar', async (req, res) => {
-    // 1. RECEBE TODOS OS DADOS DO USUÁRIO
-    const { numeros, nome, telefone, email, cpf } = req.body; 
+    // 1. RECEBE DADOS DO USUÁRIO (sem e-mail)
+    const { numeros, nome, telefone, cpf } = req.body; 
 
-    // 2. VALIDA OS DADOS QUE CHEGARAM
-    if (!numeros || numeros.length === 0 || !nome || !telefone || !email || !cpf) {
+    // 2. DEFINE O E-MAIL FIXO
+    const DUMMY_EMAIL = "portfoliodosgames@gmail.com";
+
+    // 3. VALIDA OS DADOS QUE CHEGARAM
+    if (!numeros || numeros.length === 0 || !nome || !telefone || !cpf) {
         return res.status(400).json({ error: 'Dados obrigatórios faltando ou nenhum número selecionado.' });
     }
 
     const external_reference = `ORDEM-${Date.now()}`; 
-    const cleanCpf = cpf.replace(/\D/g, ''); // 3. LIMPA O CPF REAL
+    const cleanCpf = cpf.replace(/\D/g, ''); // 4. LIMPA O CPF REAL
     const transaction_amount = VALOR_UNITARIO_RIFA * numeros.length; 
     const numerosRifa = numeros.map(n => parseInt(n));
 
@@ -122,14 +125,14 @@ app.post('/reservar', async (req, res) => {
             });
         }
         
-        // 4. CRIA O PAGAMENTO PIX COM DADOS REAIS
+        // 5. CRIA O PAGAMENTO PIX COM E-MAIL FIXO E CPF REAL
         const body = {
             transaction_amount: transaction_amount,
             description: `Rifa(s) - Total de ${numerosRifa.length} números`,
             payment_method_id: 'pix', 
             external_reference: external_reference, 
             payer: { 
-                email: email, // Usa o e-mail real
+                email: DUMMY_EMAIL, // Usa o e-mail fixo
                 identification: { type: 'CPF', number: cleanCpf } // Usa o CPF real
             }
         };
@@ -138,7 +141,7 @@ app.post('/reservar', async (req, res) => {
         
         const agoraISO = new Date(); 
 
-        // 5. ATUALIZA O BANCO DE DADOS com dados reais
+        // 6. ATUALIZA O BANCO DE DADOS (query "limpa" e com e-mail fixo)
         const updateQuery = `UPDATE rifas SET 
                                 status = 'RESERVADO', 
                                 comprador_nome = $1, 
@@ -151,9 +154,9 @@ app.post('/reservar', async (req, res) => {
                              WHERE numero = $8`;
                             
         const updatePromises = numerosRifa.map(numeroRifa => {
-            // 6. Passa todos os dados para a query
+            // 7. Passa o DUMMY_EMAIL para o banco de dados
             return client.query(updateQuery, [
-                nome, telefone, email, cleanCpf, 
+                nome, telefone, DUMMY_EMAIL, cleanCpf, 
                 external_reference, payment.id, agoraISO, numeroRifa
             ]);
         });
@@ -168,13 +171,11 @@ app.post('/reservar', async (req, res) => {
             payment_id: payment.id,
             qr_code_base64: payment.point_of_interaction.transaction_data.qr_code_base64,
             qr_code: payment.point_of_interaction.transaction_data.qr_code,
-            // 7. Retorna todos os dados do comprador
-            comprador: { nome, telefone, email, cpf } 
+            comprador: { nome, telefone, cpf } // Retorna os dados que o cliente digitou
         });
 
     } catch (error) {
         await client.query('ROLLBACK');
-        // Log de erro melhorado
         console.error('--- ERRO CRÍTICO DETALHADO (FLUXO DE RESERVA) ---');
         console.error('1. Error .stack: ', error.stack);
         console.error('2. Error .message: ', error.message);
@@ -189,34 +190,60 @@ app.post('/reservar', async (req, res) => {
 
 
 app.post('/notificar', async (req, res) => {
-    // ... (esta rota não muda) ...
+    // 1. O resourceId É o payment_id que salvamos
     const resourceId = req.query.id || req.body.data?.id; 
     const topic = req.query.topic || req.query.type;
+
     if (topic !== 'payment' || !resourceId) return res.status(200).send('Notificação ignorada.'); 
+
     try {
         console.log(`[WEBHOOK] Consultando payment_id: ${resourceId}`);
         const paymentInfo = await paymentClient.get({ id: resourceId });
+
         const status = paymentInfo.status;
-        const externalRef = paymentInfo.external_reference; 
-        if (!externalRef) {
-             console.warn(`[WEBHOOK] Pagamento ${resourceId} sem external_reference. Ignorando.`);
-             return res.status(200).send('Notificação ignorada (sem external_ref).');
-        }
-        console.log(`[WEBHOOK] Status Retornado: ${status}, Ref. Externa: ${externalRef}`);
+        // Não precisamos mais do externalRef
+        // const externalRef = paymentInfo.external_reference; 
+
+        console.log(`[WEBHOOK] Status Retornado: ${status}, Payment ID: ${resourceId}`);
+
         if (status === 'approved') {
             console.log(`--- SUCESSO: PAGAMENTO APROVADO! ---`);
-            await pool.query(`UPDATE rifas SET status = 'PAGO', reservado_em = NULL 
-                              WHERE external_reference = $1 AND status = 'RESERVADO'`, 
-                              [externalRef]);
+            
+            // 2. ATUALIZE USANDO O payment_id
+            // 3. REMOVA o "AND status = 'RESERVADO'"
+            //    (Devemos honrar o pagamento mesmo se o Janitor limpou)
+            const result = await pool.query(
+                `UPDATE rifas SET status = 'PAGO', reservado_em = NULL 
+                 WHERE payment_id = $1`, 
+                [resourceId]
+            );
+
+            if (result.rowCount > 0) {
+                console.log(`[WEBHOOK] Rifa com payment_id ${resourceId} marcada como PAGA.`);
+            } else {
+                // Isso só deve acontecer se o payment_id for desconhecido
+                console.warn(`[WEBHOOK] PAGAMENTO ${resourceId} APROVADO, mas nenhuma rifa encontrada com esse payment_id.`);
+            }
+
         } else if (status === 'rejected' || status === 'cancelled' || status === 'refunded') {
             console.log(`--- ALERTA: PAGAMENTO RECUSADO/CANCELADO/DEVOLVIDO. ---`);
-            await pool.query(`UPDATE rifas SET status = 'DISPONIVEL', comprador_nome = NULL, 
-                                comprador_telefone = NULL, comprador_email = NULL, comprador_cpf = NULL, 
-                                external_reference = NULL, payment_id = NULL, reservado_em = NULL 
-                                WHERE external_reference = $1 AND status = 'RESERVADO'`, 
-                                [externalRef]);
+            
+            // Esta lógica está OK. Ela só limpa a reserva se ela ainda estiver 'RESERVADO'
+            const result = await pool.query(
+                `UPDATE rifas SET status = 'DISPONIVEL', comprador_nome = NULL, 
+                   comprador_telefone = NULL, comprador_email = NULL, comprador_cpf = NULL, 
+                   external_reference = NULL, payment_id = NULL, reservado_em = NULL 
+                 WHERE payment_id = $1 AND status = 'RESERVADO'`, 
+                [resourceId] // 4. Use payment_id (resourceId) aqui também
+            );
+
+            if (result.rowCount > 0) {
+                console.log(`[WEBHOOK] Rifa ${resourceId} (cancelada) liberada.`);
+            }
         }
+        
         res.status(200).send('Notificação processada.');
+
     } catch (error) {
         console.error('ERRO NO PROCESSAMENTO DO WEBHOOK:', error.message);
         res.status(500).send('Erro no servidor.');
@@ -315,9 +342,10 @@ app.get('/admin/reject/:externalRef', async (req, res) => {
     }
 });
 
-// Função de limpeza "limpa" (sem erros de espaço)
 async function limparReservasExpiradas() {
     try {
+        // Query de limpeza reescrita para ser MENOS destrutiva.
+        // NÃO vamos limpar payment_id ou external_reference.
         const result = await pool.query(
             `UPDATE rifas 
              SET status = 'DISPONIVEL', 
@@ -325,16 +353,17 @@ async function limparReservasExpiradas() {
                  comprador_telefone = NULL, 
                  comprador_email = NULL, 
                  comprador_cpf = NULL, 
-                 external_reference = NULL, 
-                 payment_id = NULL, 
+                 -- external_reference e payment_id SÃO MANTIDOS
                  reservado_em = NULL
              WHERE status = 'RESERVADO' 
                AND reservado_em IS NOT NULL 
                AND reservado_em <= (NOW() - INTERVAL '1 hour')`
         );
+
         if (result.rowCount > 0) {
             console.log(`[JANITOR] Limpou ${result.rowCount} reservas expiradas (mais de 1 hora).`);
         }
+
     } catch (err) {
         console.error('[JANITOR] Erro ao limpar reservas expiradas:', err.stack);
     }
@@ -344,6 +373,7 @@ async function limparReservasExpiradas() {
 // INICIALIZAÇÃO DO SERVIDOR
 // =================================================================
 async function startServer() {
+    // ... (esta função não muda) ...
     try {
         await pool.query('SELECT NOW()');
         console.log('✅ Conexão com PostgreSQL estabelecida.');
