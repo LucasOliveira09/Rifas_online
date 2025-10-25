@@ -11,8 +11,17 @@
 <body>
 
 <div class="container">
-    <h1>RIFAS ESCOLA IRACEMA</h1>
+    <h1>RIFA 3°s ANOS - SEBRAE</h1>
     <p>Valor por número: R$ 3,00 | Total de 100 números.</p>
+    <div class="container-premios">
+        <h1>PRÊMIOS:</h1><br><br>
+
+        <div class="carrossel">
+            <img src="" alt="">
+            <img src="" alt="">
+            <img src="" alt="">
+        </div>
+    </div>
     
     <div id="pending-banner" style="display:none;">
         Você tem um pagamento pendente. <a href="pagamento.html">Clique aqui para ver o status</a>.
@@ -31,7 +40,7 @@
             <button type="submit">Buscar</button>
         </form>
         <div id="meus-numeros-display">
-            </div>
+        </div>
     </div>
 
     <br>
@@ -53,12 +62,6 @@
             <label for="telefone">Telefone (WhatsApp):</label>
             <input type="text" id="telefone" required>
             
-            <label for="email">E-mail:</label>
-            <input type="email" id="email" required>
-            
-            <label for="cpf">CPF (Obrigatório para PIX):</label>
-            <input type="text" id="cpf" required>
-
             <button type="submit" id="submit-button">Ir para pagamento. Total: <span id="button-total">R$ 0.00</span></button>
         </form>
     </div>
@@ -68,7 +71,7 @@
     const API_URL = 'https://rifas-online.onrender.com'; 
     const VALOR_UNITARIO = 3.00;
     const LS_KEY = 'rifa_pagamento_pendente_ref'; 
-    const DADOS_KEY = 'rifa_pagamento_dados_qr';  
+    const DADOS_KEY = 'rifa_pagamento_dados_qr';   
     const LS_COMPRADOR_TEL = 'rifa_comprador_telefone';
     let selectedRifas = []; 
     // pollingInterval e externalReference removidos, não são mais usados aqui
@@ -172,13 +175,15 @@
             return;
         }
 
+        // ******** ALTERAÇÃO AQUI ********
+        // Objeto formData ajustado para enviar apenas nome e telefone
         const formData = {
             numeros: selectedRifas, 
             nome: document.getElementById('nome').value,
             telefone: document.getElementById('telefone').value,
-            email: document.getElementById('email').value,
-            cpf: document.getElementById('cpf').value,
+            // email e cpf removidos
         };
+        // ******** FIM DA ALTERAÇÃO ********
 
         try {
             button.disabled = true;
@@ -196,10 +201,11 @@
                 
                 localStorage.setItem(LS_KEY, data.external_reference);
 
+                // data.comprador agora só terá nome e telefone, vindo do backend
                 const dadosParaPagamento = {
-                ...data, 
-                comprador: formData 
-            };
+                   ...data, 
+                   comprador: formData 
+                };
 
                 localStorage.setItem(DADOS_KEY, JSON.stringify(data));
 
