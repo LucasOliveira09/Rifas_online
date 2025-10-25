@@ -342,6 +342,29 @@ app.get('/admin/reject/:externalRef', async (req, res) => {
     }
 });
 
+app.get('/admin/reset-total-da-rifa-agora', async (req, res) => {
+    // ATENÇÃO: Esta é uma rota perigosa. 
+    // Considere removê-la após o uso.
+    try {
+        console.warn(`[ADMIN] !!! ATENÇÃO: TRUNCATE TABLE EXECUTADO !!!`);
+        
+        // 1. Apaga TODAS as linhas da tabela
+        await pool.query('TRUNCATE TABLE rifas');
+
+        // 2. Reinicia o servidor (o Render faz isso, mas podemos tentar)
+        // Esta parte pode não funcionar dependendo das permissões, 
+        // mas o mais importante é o TRUNCATE
+        
+        res.send(`TABELA 'rifas' ZERADA (TRUNCATE). 
+                   POR FAVOR, REINICIE O SERVIÇO NO PAINEL DO RENDER AGORA
+                   para que a função initializeDatabase rode e recrie os números.`);
+        
+    } catch (error) {
+        console.error("Erro ao executar TRUNCATE:", error.stack);
+        res.status(500).send(`Erro ao resetar: ${error.message}`);
+    }
+});
+
 async function limparReservasExpiradas() {
     try {
         // Query de limpeza reescrita para ser MENOS destrutiva.
