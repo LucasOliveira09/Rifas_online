@@ -190,7 +190,6 @@ app.post('/reservar', async (req, res) => {
 
 
 app.post('/notificar', async (req, res) => {
-    // 1. O resourceId É o payment_id que salvamos
     const resourceId = req.query.id || req.body.data?.id; 
     const topic = req.query.topic || req.query.type;
 
@@ -201,41 +200,40 @@ app.post('/notificar', async (req, res) => {
         const paymentInfo = await paymentClient.get({ id: resourceId });
 
         const status = paymentInfo.status;
-        // Não precisamos mais do externalRef
-        // const externalRef = paymentInfo.external_reference; 
-
         console.log(`[WEBHOOK] Status Retornado: ${status}, Payment ID: ${resourceId}`);
 
         if (status === 'approved') {
             console.log(`--- SUCESSO: PAGAMENTO APROVADO! ---`);
             
-            // 2. ATUALIZE USANDO O payment_id
-            // 3. REMOVA o "AND status = 'RESERVADO'"
-            //    (Devemos honrar o pagamento mesmo se o Janitor limpou)
+            // ***** ALTERAÇÃO AQUI *****
+            // Adicionamos '::BIGINT' para forçar a conversão do $1 (string) para BIGINT
             const result = await pool.query(
                 `UPDATE rifas SET status = 'PAGO', reservado_em = NULL 
-                 WHERE payment_id = $1`, 
+                 WHERE payment_id = $1::BIGINT`, // <-- CAST EXPLÍCITO
                 [resourceId]
             );
+            // ***** FIM DA ALTERAÇÃO *****
 
             if (result.rowCount > 0) {
                 console.log(`[WEBHOOK] Rifa com payment_id ${resourceId} marcada como PAGA.`);
             } else {
-                // Isso só deve acontecer se o payment_id for desconhecido
+                // Se isso acontecer, significa que o payment_id não foi salvo na reserva
                 console.warn(`[WEBHOOK] PAGAMENTO ${resourceId} APROVADO, mas nenhuma rifa encontrada com esse payment_id.`);
             }
 
         } else if (status === 'rejected' || status === 'cancelled' || status === 'refunded') {
             console.log(`--- ALERTA: PAGAMENTO RECUSADO/CANCELADO/DEVOLVIDO. ---`);
             
-            // Esta lógica está OK. Ela só limpa a reserva se ela ainda estiver 'RESERVADO'
+            // ***** ALTERAÇÃO AQUI *****
+            // Adicionamos '::BIGINT' para forçar a conversão
             const result = await pool.query(
                 `UPDATE rifas SET status = 'DISPONIVEL', comprador_nome = NULL, 
                    comprador_telefone = NULL, comprador_email = NULL, comprador_cpf = NULL, 
                    external_reference = NULL, payment_id = NULL, reservado_em = NULL 
-                 WHERE payment_id = $1 AND status = 'RESERVADO'`, 
-                [resourceId] // 4. Use payment_id (resourceId) aqui também
+                 WHERE payment_id = $1::BIGINT AND status = 'RESERVADO'`, 
+                [resourceId] 
             );
+            // ***** FIM DA ALTERAÇÃO *****
 
             if (result.rowCount > 0) {
                 console.log(`[WEBHOOK] Rifa ${resourceId} (cancelada) liberada.`);
