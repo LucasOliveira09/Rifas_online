@@ -62,6 +62,11 @@
             <label for="telefone">Telefone (WhatsApp):</label>
             <input type="text" id="telefone" required>
             
+            <label for="email">E-mail:</label>
+            <input type="email" id="email" required>
+            
+            <label for="cpf">CPF (Obrigatório para PIX):</label>
+            <input type="text" id="cpf" required>
             <button type="submit" id="submit-button">Ir para pagamento. Total: <span id="button-total">R$ 0.00</span></button>
         </form>
     </div>
@@ -74,7 +79,6 @@
     const DADOS_KEY = 'rifa_pagamento_dados_qr';   
     const LS_COMPRADOR_TEL = 'rifa_comprador_telefone';
     let selectedRifas = []; 
-    // pollingInterval e externalReference removidos, não são mais usados aqui
 
     // =============================================================
     // FUNÇÕES DE UTILIDADE E UI
@@ -85,9 +89,11 @@
         
         document.getElementById('numeros-selecionados-display').textContent = numerosDisplay || 'Nenhum';
         document.getElementById('valor-total-display').textContent = total.toFixed(2);
+        
+        // Esta é a linha (88) que estava dando erro.
+        // O HTML agora está correto, então vai funcionar.
         document.getElementById('button-total').textContent = `R$ ${total.toFixed(2)}`;
 
-        // A lógica de exibição do carrinho e formulário permanece a mesma
         if (selectedRifas.length > 0) {
             document.getElementById('carrinho-resumo').style.display = 'block';
             document.getElementById('selecao-area').style.display = 'block';
@@ -98,13 +104,12 @@
     }
 
     function toggleRifa(numero, element) {
+        // ... (esta função não muda) ...
         const index = selectedRifas.indexOf(numero);
         const num = parseInt(numero);
-
         if (element.classList.contains('RESERVADO') || element.classList.contains('PAGO')) {
             return; 
         }
-
         if (index > -1) {
             selectedRifas.splice(index, 1);
             element.classList.remove('selected');
@@ -119,20 +124,18 @@
     // 1. CARREGAR E EXIBIR OS NÚMEROS DA RIFA
     // =============================================================
     async function loadRifas() {
+        // ... (esta função não muda) ...
         try {
             const response = await fetch(`${API_URL}/rifas`);
             const rifas = await response.json();
-            
             const grid = document.getElementById('rifa-grid');
             grid.innerHTML = ''; 
             selectedRifas = []; 
-
             rifas.forEach(rifa => {
                 const div = document.createElement('div');
                 div.className = `numero ${rifa.status}`;
                 div.textContent = rifa.numero;
                 div.dataset.numero = rifa.numero;
-
                 if (rifa.status === 'DISPONIVEL') {
                     div.addEventListener('click', () => toggleRifa(rifa.numero, div));
                 } else {
@@ -140,14 +143,11 @@
                 }
                 grid.appendChild(div);
             });
-            
             checkPendingPayment(); 
             checkMyCompletedRifas();
-
-
         } catch (error) {
             console.error('Erro ao carregar rifas:', error);
-            document.getElementById('rifa-grid').innerHTML = '<p style="color:red;">Erro ao conectar com o backend. Verifique se o servidor está ativo na porta 3000.</p>';
+            document.getElementById('rifa-grid').innerHTML = '<p style="color:red;">Erro ao conectar com o backend.</p>';
         }
     }
 
@@ -155,6 +155,7 @@
     // FUNÇÃO DE VERIFICAÇÃO DE SESSÃO
     // =============================================================
     function checkPendingPayment() {
+        // ... (esta função não muda) ...
         const storedRef = localStorage.getItem(LS_KEY);
         if (storedRef) {
             document.getElementById('pending-banner').style.display = 'block';
@@ -176,12 +177,13 @@
         }
 
         // ******** ALTERAÇÃO AQUI ********
-        // Objeto formData ajustado para enviar apenas nome e telefone
+        // Objeto formData agora envia NOME, TELEFONE, EMAIL e CPF
         const formData = {
             numeros: selectedRifas, 
             nome: document.getElementById('nome').value,
             telefone: document.getElementById('telefone').value,
-            // email e cpf removidos
+            email: document.getElementById('email').value,
+            cpf: document.getElementById('cpf').value,
         };
         // ******** FIM DA ALTERAÇÃO ********
 
@@ -200,15 +202,11 @@
             if (response.ok && data.qr_code_base64) {
                 
                 localStorage.setItem(LS_KEY, data.external_reference);
-
-                // data.comprador agora só terá nome e telefone, vindo do backend
                 const dadosParaPagamento = {
                    ...data, 
                    comprador: formData 
                 };
-
                 localStorage.setItem(DADOS_KEY, JSON.stringify(data));
-
                 window.location.href = 'pagamento.html';
 
             } else if (response.status === 409) {
@@ -229,68 +227,55 @@
         }
     });
 
+    // =============================================================
+    // 3. LÓGICA DE PESQUISA
+    // =============================================================
     document.getElementById('form-pesquisa').addEventListener('submit', (e) => {
+        // ... (esta função não muda) ...
         e.preventDefault();
         const telefone = document.getElementById('search-telefone').value;
         fetchAndHighlightRifas(telefone);
     });
 
-    // A função startPaymentPolling() foi removida desta página.
-
     async function fetchAndHighlightRifas(telefone) {
+        // ... (esta função não muda) ...
         if (!telefone) return;
-        
         const displayArea = document.getElementById('meus-numeros-display');
         const grid = document.getElementById('rifa-grid');
         displayArea.innerHTML = 'Buscando...';
-
         try {
             const response = await fetch(`${API_URL}/minhas-rifas/${telefone}`);
             const rifas = await response.json();
-
             if (!response.ok) {
                 displayArea.innerHTML = `<span class="erro">${rifas.error || 'Telefone não encontrado.'}</span>`;
                 return;
             }
-            
             if (rifas.length === 0) {
                 displayArea.innerHTML = 'Nenhum número (pago ou pendente) encontrado para este telefone.';
                 return;
             }
-
-            // Limpa destaques antigos
             grid.querySelectorAll('.meu-numero').forEach(el => el.classList.remove('meu-numero'));
-
             const numeros = [];
             rifas.forEach(rifa => {
                 numeros.push(rifa.numero);
-                // Encontra o div na grade e aplica a classe
                 const el = grid.querySelector(`.numero[data-numero="${rifa.numero}"]`);
                 if (el) {
                     el.classList.add('meu-numero');
                 }
             });
-
-            // Exibe os números encontrados
             displayArea.innerHTML = `Seus números: <strong>${numeros.join(', ')}</strong>`;
-            // Salva o telefone pesquisado para futuras visitas
             localStorage.setItem(LS_COMPRADOR_TEL, telefone);
-
         } catch (error) {
             console.error('Erro ao buscar rifas:', error);
             displayArea.innerHTML = '<span class="erro">Erro ao conectar com o servidor.</span>';
         }
     }
 
-    /**
-     * Verifica se há um telefone salvo no localStorage e roda a busca
-     */
     function checkMyCompletedRifas() {
+        // ... (esta função não muda) ...
         const meuTelefone = localStorage.getItem(LS_COMPRADOR_TEL);
         if (meuTelefone) {
-            // Preenche o campo de busca
             document.getElementById('search-telefone').value = meuTelefone;
-            // Roda a busca automaticamente
             fetchAndHighlightRifas(meuTelefone);
         }
     }
